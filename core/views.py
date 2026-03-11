@@ -108,6 +108,41 @@ def courses_view(request: HttpRequest):
 
 
 
+@login_required
+def assignments_view(request: HttpRequest):
+    """
+    M4:
+    - Upcoming assignments table
+    - Add Assignment form (basic create flow)
+    """
+    today = date.today()
+    upcoming = (
+        Assignment.objects.filter(course__user=request.user)
+        .exclude(status=Assignment.Status.DONE)
+        .filter(due_date__isnull=False, due_date__gte=today)
+        .select_related("course")
+        .order_by("due_date")
+    )
+
+    if request.method == "POST":
+        form = AssignmentForm(request.POST, user=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Assignment saved.")
+            return redirect("core:assignments")
+    else:
+        form = AssignmentForm(user=request.user)
+
+    return render(
+        request,
+        "assignments/assignments.html",
+        {
+            "upcoming": upcoming,
+            "form": form,
+        },
+    )
+
+
 
 @require_POST
 @login_required
@@ -211,3 +246,37 @@ def api_upsert_attendance(request: HttpRequest, course_id: int):
 
     session.save()
     return JsonResponse({"ok": True, "session_id": session.id})
+
+
+@require_POST
+@login_required
+def api_assignment_status(request: HttpRequest, assignment_id: int):
+    """
+    body: { "status": "TODO|INPR|DONE" }
+    """
+    data = _json_body(request)
+    if data is None or "status" not in data:
+        return HttpResponseBadRequest("Invalid JSON body")
+
+    assignment = get_object_or_404(
+        Assignment,
+        pk=assignment_id,
+        course__user=request.user,
+    )
+    status = data["status"]
+
+    valid_statuses = {choice[0] for choice in Assignment.Status.choices}
+    if status not in valid_statuses:
+        return HttpResponseBadRequest("Invalid status")
+
+    assignment.status = status
+    assignment.save(update_fields=["status", "updated_at"])
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "assignment_id": assignment.id,
+            "status": assignment.status,
+            "status_label": assignment.get_status_display(),
+        }
+    )
