@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Plan & Focus{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-5">
+    <h1 class="h5">Today's Plan</h1>
+
+    <div class="d-flex gap-2 mb-2">
+      <button class="btn btn-outline-primary btn-sm" id="btn-import">Import from Assignments</button>
+    </div>
+
+    <ul class="list-group" id="plan-list">
+      {% for item in plan_items %}
+      <li class="list-group-item d-flex align-items-center gap-2" data-plan-id="{{ item.id }}">
+        <input class="form-check-input js-plan-toggle" type="checkbox" {% if item.is_done %}checked{% endif %}>
+        <span class="{% if item.is_done %}text-decoration-line-through text-muted{% endif %}">{{ item.title }}</span>
+      </li>
+      {% empty %}
+      <li class="list-group-item text-muted">No plan items for today.</li>
+      {% endfor %}
+    </ul>
+
+    <hr class="my-3">
+    <h2 class="h6">Add plan item</h2>
+    <form method="post" class="row g-2">
+      {% csrf_token %}
+      <div class="col-6">{{ form.plan_date }}</div>
+      <div class="col-6">{{ form.course }}</div>
+      <div class="col-12">{{ form.title }}</div>
+      <div class="col-12">
+        <button class="btn btn-primary btn-sm" type="submit">Add</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="col-lg-7">
+    <h1 class="h5">Current Session</h1>
+
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div class="display-6" id="timer">25:00</div>
+        <select class="form-select w-auto" id="duration">
+          <option value="25" selected>25 min</option>
+          <option value="50">50 min</option>
+          <option value="30">30 min</option>
+        </select>
+      </div>
+
+      <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-success" id="btn-start">Start</button>
+        <button class="btn btn-secondary" id="btn-pause">Pause</button>
+        <button class="btn btn-danger" id="btn-finish">Finish</button>
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label">Session Label / Note</label>
+        <input class="form-control" id="note" maxlength="255" />
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label">Linked to Plan Item (optional)</label>
+        <select class="form-select" id="linked-plan">
+          <option value="">-- none --</option>
+          {% for item in plan_items %}
+            <option value="{{ item.id }}">{{ item.title }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">If selected, the FocusSession will reference plan_item_id.</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/plan_focus.js' %}"></script>
+{% endblock %}
