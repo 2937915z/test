@@ -1,0 +1,213 @@
+from __future__ import annotations
+
+import json
+from datetime import date, datetime, timedelta
+
+from django.contrib import messages
+from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.db.models import Sum
+from django.http import HttpRequest, JsonResponse, HttpResponseBadRequest
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
+
+from .forms import RegisterForm, CourseForm, AssignmentForm, PlanItemForm
+from .models import Course, Assignment, AttendanceRecord, DailyPlanItem, FocusSession
+
+
+# -------------------------
+# Auth / Main Pages
+# -------------------------
+
+def register_view(request: HttpRequest):
+    """M1: Register user and log in immediately on success."""
+    if request.method == "POST":
+        form = RegisterForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            messages.success(request, "Account created successfully.")
+            return redirect("core:dashboard")
+    else:
+        form = RegisterForm()
+    return render(request, "auth/register.html", {"form": form})
+
+
+
+@login_required
+def courses_view(request: HttpRequest):
+    """
+    M2 + M3:
+    - Left side: Course creation / course cards
+    - Right side: Attendance table (one row per class date + dropdown Present/Late/Absent)
+    """
+    courses = Course.objects.filter(user=request.user)
+
+    # ---- M2: Create Course ----
+    if request.method == "POST":
+        form = CourseForm(request.POST)
+        if form.is_valid():
+            course = form.save(commit=False)
+            course.user = request.user
+            course.save()
+            messages.success(request, "Course created.")
+            return redirect(f"{request.path}?course={course.id}")
+    else:
+        form = CourseForm()
+
+    # ---- Selected course ----
+    selected_course = None
+    selected_course_id = request.GET.get("course")
+    if selected_course_id:
+        selected_course = get_object_or_404(Course, pk=selected_course_id, user=request.user)
+    elif courses.exists():
+        selected_course = courses.first()
+
+    # ---- Attendance rows ----
+    attendance_rows: list[dict] = []
+    if selected_course:
+        today = date.today()
+
+        # The most recent class date for this course (based on the day_of_week system)
+        delta = (today.weekday() - selected_course.day_of_week) % 7
+        recent_class_date = today - timedelta(days=delta)
+
+        # Generate 6 lines: Past 2 times + Most recent time + Next 3 times
+        class_dates = [recent_class_date + timedelta(days=7 * i) for i in range(-2, 4)]
+
+        existing_records = AttendanceRecord.objects.filter(
+            user=request.user,
+            course=selected_course,
+            class_date__in=class_dates,
+        )
+        records_by_date = {r.class_date: r for r in existing_records}
+
+        for idx, d in enumerate(class_dates, start=1):
+            record = records_by_date.get(d)
+            date_label = f"{d.isoformat()} (Today)" if d == today else d.isoformat()
+
+            attendance_rows.append(
+                {
+                    "class_date": d,
+                    "date_label": date_label,
+                    "session_label": f"Scheduled Class {idx}",
+                    "status": record.status if record else AttendanceRecord.Status.PRESENT,
+                    "attendance_id": record.id if record else None,
+                }
+            )
+
+    context = {
+        "courses": courses,
+        "form": form,
+        "selected_course": selected_course,
+        "attendance_rows": attendance_rows,
+        "attendance_status_choices": AttendanceRecord.Status.choices,
+    }
+    return render(request, "courses/courses.html", context)
+
+
+
+
+@require_POST
+@login_required
+def api_upsert_attendance(request: HttpRequest, course_id: int):
+    """
+    body:
+      {
+        "class_date": "YYYY-MM-DD",
+        "status": "PRES|LATE|ABSN",
+        "note": ""
+      }
+    """
+    data = _json_body(request)
+    if data is None:
+        return HttpResponseBadRequest("Invalid JSON body")
+
+    course = get_object_or_404(Course, pk=course_id, user=request.user)
+
+    try:
+        class_date_value = date.fromisoformat(data.get("class_date"))
+    except Exception:
+        return HttpResponseBadRequest("Invalid class_date")
+
+    status = data.get("status", AttendanceRecord.Status.PRESENT)
+    valid_statuses = {choice[0] for choice in AttendanceRecord.Status.choices}
+    if status not in valid_statuses:
+        return HttpResponseBadRequest("Invalid status")
+
+    note = (data.get("note") or "").strip()
+
+    record, created = AttendanceRecord.objects.update_or_create(
+        user=request.user,
+        course=course,
+        class_date=class_date_value,
+        defaults={"status": status, "note": note},
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "attendance_id": record.id,
+            "created": created,
+            "status": record.status,
+            "status_label": record.get_status_display(),
+            "class_date": record.class_date.isoformat(),
+        }
+    )
+
+
+
+    """
+    body:
+      {
+        "start_time": "2026-02-24T12:00:00Z",
+        "end_time": "2026-02-24T12:25:00Z",
+        "duration_minutes": 25,
+        "note": "",
+        "assignment_id": 123,   # optional
+        "plan_item_id": 456     # optional
+      }
+    """
+    data = _json_body(request)
+    if data is None:
+        return HttpResponseBadRequest("Invalid JSON body")
+
+    try:
+        start_time = _parse_iso_datetime(data["start_time"])
+        end_time = _parse_iso_datetime(data["end_time"])
+        duration_minutes = int(data["duration_minutes"])
+    except Exception:
+        return HttpResponseBadRequest("Invalid time/duration")
+
+    note = (data.get("note") or "").strip()
+    assignment_id = data.get("assignment_id") or None
+    plan_item_id = data.get("plan_item_id") or None
+
+    assignment = None
+    plan_item = None
+
+    if assignment_id:
+        assignment = get_object_or_404(Assignment, pk=assignment_id, course__user=request.user)
+    if plan_item_id:
+        plan_item = get_object_or_404(DailyPlanItem, pk=plan_item_id, user=request.user)
+
+    session = FocusSession(
+        user=request.user,
+        start_time=start_time,
+        end_time=end_time,
+        duration_minutes=duration_minutes,
+        note=note,
+        assignment=assignment,
+        plan_item=plan_item,
+    )
+
+    try:
+        session.full_clean()  # XOR / end>start / ownership validation
+    except ValidationError as e:
+        if hasattr(e, "message_dict"):
+            return JsonResponse({"ok": False, "errors": e.message_dict}, status=400)
+        return JsonResponse({"ok": False, "errors": e.messages}, status=400)
+
+    session.save()
+    return JsonResponse({"ok": True, "session_id": session.id})

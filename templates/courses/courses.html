@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Courses & Attendance{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <!-- On the left: Course Management (M2)  -->
+  <div class="col-lg-5">
+    <h1 class="h4 mb-3">My Enrolled Courses</h1>
+
+    <div class="row row-cols-1 row-cols-md-2 g-2 mb-3">
+      {% for c in courses %}
+      <div class="col">
+        <a href="{% url 'core:courses' %}?course={{ c.id }}" class="text-decoration-none">
+          <div class="card h-100 {% if selected_course and selected_course.id == c.id %}border-primary{% endif %}">
+            <div class="card-body">
+              <h2 class="h6 mb-1">{{ c.title }}</h2>
+              <div class="small text-muted">
+                {{ c.get_day_of_week_display|default:c.day_of_week }} · {{ c.start_time }}–{{ c.end_time }}
+              </div>
+              {% if c.location %}
+              <div class="small text-muted">{{ c.location }}</div>
+              {% endif %}
+            </div>
+          </div>
+        </a>
+      </div>
+      {% empty %}
+      <div class="col-12">
+        <div class="alert alert-secondary mb-0">No courses yet. Add your first course below.</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Add New Course</h2>
+        <form method="post" novalidate>
+          {% csrf_token %}
+          {{ form.non_field_errors }}
+
+          <div class="mb-2">
+            <label class="form-label">Course Title</label>
+            {{ form.title }}
+            <div class="text-danger small">{{ form.title.errors }}</div>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Day of Week</label>
+            {{ form.day_of_week }}
+            <div class="text-danger small">{{ form.day_of_week.errors }}</div>
+          </div>
+
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label">Start Time</label>
+              {{ form.start_time }}
+              <div class="text-danger small">{{ form.start_time.errors }}</div>
+            </div>
+            <div class="col-6">
+              <label class="form-label">End Time</label>
+              {{ form.end_time }}
+              <div class="text-danger small">{{ form.end_time.errors }}</div>
+            </div>
+          </div>
+
+          <div class="mt-2 mb-3">
+            <label class="form-label">Location (optional)</label>
+            {{ form.location }}
+            <div class="text-danger small">{{ form.location.errors }}</div>
+          </div>
+
+          <button class="btn btn-primary" type="submit">Create Course</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right side: Attendance Record (M3) -->
+  <div class="col-lg-7">
+    {% if selected_course %}
+      <h2 class="h4 mb-3">Attendance Tracker: {{ selected_course.title }}</h2>
+
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+          <thead class="table-light">
+            <tr>
+              <th style="width: 32%;">Date</th>
+              <th style="width: 28%;">Session</th>
+              <th style="width: 25%;">Status</th>
+              <th style="width: 15%;">Save State</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in attendance_rows %}
+            <tr data-attendance-row
+                data-course-id="{{ selected_course.id }}"
+                data-class-date="{{ row.class_date|date:'Y-m-d' }}">
+              <td>{{ row.date_label }}</td>
+              <td>{{ row.session_label }}</td>
+              <td>
+                <label class="visually-hidden" for="att-status-{{ forloop.counter }}">
+                  Attendance status for {{ row.date_label }}
+                </label>
+                <select id="att-status-{{ forloop.counter }}" class="form-select form-select-sm js-attendance-status">
+                  {% for value, label in attendance_status_choices %}
+                    <option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td>
+                <span class="badge text-bg-secondary js-attendance-save-state">Saved</span>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" class="text-muted">No attendance rows available.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <p class="small text-muted mb-0">
+        Constraint: one attendance record per user / course / date (enforced in database).
+      </p>
+    {% else %}
+      <div class="alert alert-info">
+        Please create a course first to start attendance tracking.
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/attendance.js' %}"></script>
+{% endblock %}
