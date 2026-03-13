@@ -36,6 +36,54 @@ def register_view(request: HttpRequest):
 
 
 @login_required
+def dashboard(request: HttpRequest):
+    """
+    S1 Dashboard:
+    - upcoming assignments
+    - weekly focus minutes
+    - attendance rate
+    """
+    today = date.today()
+
+    # Upcoming assignments (未完成 + 未过期)
+    upcoming = (
+        Assignment.objects.filter(course__user=request.user)
+        .exclude(status=Assignment.Status.DONE)
+        .filter(due_date__isnull=False, due_date__gte=today)
+        .select_related("course")
+        .order_by("due_date")[:10]
+    )
+
+    # Weekly focus minutes (从本周一开始)
+    start_week = today - timedelta(days=today.weekday())
+    total_focus = (
+        FocusSession.objects.filter(user=request.user, start_time__date__gte=start_week)
+        .aggregate(total=Sum("duration_minutes"))
+        .get("total")
+        or 0
+    )
+
+    # Attendance rate（按当前所有考勤记录计算；你也可改为本周/本月）
+    attendance_total = AttendanceRecord.objects.filter(user=request.user).count()
+    attendance_present = AttendanceRecord.objects.filter(
+        user=request.user,
+        status=AttendanceRecord.Status.PRESENT,
+    ).count()
+    attendance_rate = round((attendance_present / attendance_total) * 100, 1) if attendance_total else 0.0
+
+    return render(
+        request,
+        "dashboard.html",
+        {
+            "upcoming": upcoming,
+            "total_focus": total_focus,
+            "attendance_rate": attendance_rate,
+            "attendance_total": attendance_total,
+        },
+    )
+
+
+@login_required
 def courses_view(request: HttpRequest):
     """
     M2 + M3:

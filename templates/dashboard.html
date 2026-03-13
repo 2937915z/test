@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+  <div>
+    <h1 class="h4 mb-0">Dashboard</h1>
+    <div class="text-muted small">Overview of focus, attendance, and upcoming coursework</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'core:courses' %}" class="btn btn-outline-primary btn-sm">Courses & Attendance</a>
+    <a href="{% url 'core:assignments' %}" class="btn btn-outline-primary btn-sm">Assignments</a>
+    <a href="{% url 'core:plan_focus' %}" class="btn btn-outline-primary btn-sm">Today's Plan & Focus</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <!-- KPI 1: Weekly Focus -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small mb-1">This Week Focus Time</div>
+        <div class="display-6">{{ total_focus }} <span class="fs-6">min</span></div>
+        <div class="small text-muted">Sum of recorded focus sessions from this week</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI 2: Attendance Rate -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small mb-1">Attendance Rate</div>
+        <div class="display-6">{{ attendance_rate }}<span class="fs-6">%</span></div>
+        <div class="small text-muted">Based on {{ attendance_total }} attendance records</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI 3: Upcoming Count -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small mb-1">Upcoming Assignments</div>
+        <div class="display-6">{{ upcoming|length }}</div>
+        <div class="small text-muted">Top 10 active assignments shown below</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Upcoming Assignments Table -->
+  <div class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h5 mb-0">Upcoming Assignments</h2>
+          <a href="{% url 'core:assignments' %}" class="btn btn-sm btn-primary">Manage Assignments</a>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Title</th>
+                <th>Course</th>
+                <th>Due Date</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in upcoming %}
+              <tr>
+                <td>{{ a.title }}</td>
+                <td>{{ a.course.title }}</td>
+                <td>
+                  {% if a.due_date %}
+                    {{ a.due_date }}
+                  {% else %}
+                    <span class="text-muted">No due date</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge
+                    {% if a.status == 'DONE' %}text-bg-success
+                    {% elif a.status == 'INPR' %}text-bg-primary
+                    {% else %}text-bg-secondary{% endif %}">
+                    {{ a.get_status_display }}
+                  </span>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="4" class="text-muted">No upcoming assignments.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="small text-muted mt-2">
+          Upcoming rule: status ≠ Done and due date ≥ today (sorted by due date ascending).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions / Notes -->
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h5">Quick Actions</h2>
+        <div class="d-grid gap-2 mb-3">
+          <a href="{% url 'core:courses' %}" class="btn btn-outline-secondary">Add / View Courses</a>
+          <a href="{% url 'core:assignments' %}" class="btn btn-outline-secondary">Add Assignment</a>
+          <a href="{% url 'core:plan_focus' %}" class="btn btn-outline-secondary">Open Plan & Focus</a>
+        </div>
+
+        <hr>
+
+        <h3 class="h6">How this dashboard uses stored data</h3>
+        <ul class="small text-muted mb-0">
+          <li><strong>Focus time</strong> is calculated from saved <code>FocusSession</code> records.</li>
+          <li><strong>Attendance rate</strong> is calculated from saved <code>AttendanceRecord</code> entries.</li>
+          <li><strong>Upcoming assignments</strong> are queried from the <code>Assignment</code> table.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
