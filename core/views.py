@@ -36,6 +36,54 @@ def register_view(request: HttpRequest):
 
 
 @login_required
+def dashboard(request: HttpRequest):
+    """
+    S1 Dashboard:
+    - upcoming assignments
+    - weekly focus minutes
+    - attendance rate
+    """
+    today = date.today()
+
+    # Upcoming assignments (未完成 + 未过期)
+    upcoming = (
+        Assignment.objects.filter(course__user=request.user)
+        .exclude(status=Assignment.Status.DONE)
+        .filter(due_date__isnull=False, due_date__gte=today)
+        .select_related("course")
+        .order_by("due_date")[:10]
+    )
+
+    # Weekly focus minutes (从本周一开始)
+    start_week = today - timedelta(days=today.weekday())
+    total_focus = (
+        FocusSession.objects.filter(user=request.user, start_time__date__gte=start_week)
+        .aggregate(total=Sum("duration_minutes"))
+        .get("total")
+        or 0
+    )
+
+    # Attendance rate（按当前所有考勤记录计算；你也可改为本周/本月）
+    attendance_total = AttendanceRecord.objects.filter(user=request.user).count()
+    attendance_present = AttendanceRecord.objects.filter(
+        user=request.user,
+        status=AttendanceRecord.Status.PRESENT,
+    ).count()
+    attendance_rate = round((attendance_present / attendance_total) * 100, 1) if attendance_total else 0.0
+
+    return render(
+        request,
+        "dashboard.html",
+        {
+            "upcoming": upcoming,
+            "total_focus": total_focus,
+            "attendance_rate": attendance_rate,
+            "attendance_total": attendance_total,
+        },
+    )
+
+
+@login_required
 def courses_view(request: HttpRequest):
     """
     M2 + M3:
@@ -106,6 +154,41 @@ def courses_view(request: HttpRequest):
     }
     return render(request, "courses/courses.html", context)
 
+
+
+@login_required
+def assignments_view(request: HttpRequest):
+    """
+    M4:
+    - Upcoming assignments table
+    - Add Assignment form (basic create flow)
+    """
+    today = date.today()
+    upcoming = (
+        Assignment.objects.filter(course__user=request.user)
+        .exclude(status=Assignment.Status.DONE)
+        .filter(due_date__isnull=False, due_date__gte=today)
+        .select_related("course")
+        .order_by("due_date")
+    )
+
+    if request.method == "POST":
+        form = AssignmentForm(request.POST, user=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Assignment saved.")
+            return redirect("core:assignments")
+    else:
+        form = AssignmentForm(user=request.user)
+
+    return render(
+        request,
+        "assignments/assignments.html",
+        {
+            "upcoming": upcoming,
+            "form": form,
+        },
+    )
 
 @login_required
 def plan_focus_view(request: HttpRequest):
@@ -256,62 +339,6 @@ def api_upsert_attendance(request: HttpRequest, course_id: int):
     )
 
 
-
-    """
-    body:
-      {
-        "start_time": "2026-02-24T12:00:00Z",
-        "end_time": "2026-02-24T12:25:00Z",
-        "duration_minutes": 25,
-        "note": "",
-        "assignment_id": 123,   # optional
-        "plan_item_id": 456     # optional
-      }
-    """
-    data = _json_body(request)
-    if data is None:
-        return HttpResponseBadRequest("Invalid JSON body")
-
-    try:
-        start_time = _parse_iso_datetime(data["start_time"])
-        end_time = _parse_iso_datetime(data["end_time"])
-        duration_minutes = int(data["duration_minutes"])
-    except Exception:
-        return HttpResponseBadRequest("Invalid time/duration")
-
-    note = (data.get("note") or "").strip()
-    assignment_id = data.get("assignment_id") or None
-    plan_item_id = data.get("plan_item_id") or None
-
-    assignment = None
-    plan_item = None
-
-    if assignment_id:
-        assignment = get_object_or_404(Assignment, pk=assignment_id, course__user=request.user)
-    if plan_item_id:
-        plan_item = get_object_or_404(DailyPlanItem, pk=plan_item_id, user=request.user)
-
-    session = FocusSession(
-        user=request.user,
-        start_time=start_time,
-        end_time=end_time,
-        duration_minutes=duration_minutes,
-        note=note,
-        assignment=assignment,
-        plan_item=plan_item,
-    )
-
-    try:
-        session.full_clean()  # XOR / end>start / ownership validation
-    except ValidationError as e:
-        if hasattr(e, "message_dict"):
-            return JsonResponse({"ok": False, "errors": e.message_dict}, status=400)
-        return JsonResponse({"ok": False, "errors": e.messages}, status=400)
-
-    session.save()
-    return JsonResponse({"ok": True, "session_id": session.id})
-
-
 @require_POST
 @login_required
 def api_toggle_plan_item(request: HttpRequest, plan_item_id: int):
@@ -411,4 +438,3 @@ def api_create_focus_session(request: HttpRequest):
 
     session.save()
     return JsonResponse({"ok": True, "session_id": session.id})
-

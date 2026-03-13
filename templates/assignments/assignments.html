@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Assignments{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Upcoming Assignments</h1>
+
+<div class="table-responsive">
+  <table class="table table-sm align-middle">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Course</th>
+        <th>Due Date</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in upcoming %}
+      <tr data-assignment-id="{{ a.id }}">
+        <td>{{ a.title }}</td>
+        <td>{{ a.course.title }}</td>
+        <td>{{ a.due_date|default:"—" }}</td>
+        <td>
+          <select class="form-select form-select-sm js-status">
+            <option value="TODO" {% if a.status == "TODO" %}selected{% endif %}>To do</option>
+            <option value="INPR" {% if a.status == "INPR" %}selected{% endif %}>In progress</option>
+            <option value="DONE" {% if a.status == "DONE" %}selected{% endif %}>Done</option>
+          </select>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="4" class="text-muted">No upcoming assignments.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2 class="h5 mt-4 mb-3">Add assignment</h2>
+<form method="post" class="card card-body">
+  {% csrf_token %}
+  <div class="row g-2">
+    <div class="col-md-4">{{ form.title.label_tag }}{{ form.title }}</div>
+    <div class="col-md-3">{{ form.course.label_tag }}{{ form.course }}</div>
+    <div class="col-md-2">{{ form.due_date.label_tag }}{{ form.due_date }}</div>
+    <div class="col-md-3">{{ form.status.label_tag }}{{ form.status }}</div>
+  </div>
+  <div class="mt-2">
+    {{ form.notes.label_tag }}{{ form.notes }}
+  </div>
+  <div class="mt-3">
+    <button type="submit" class="btn btn-primary btn-sm">Save assignment</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+  {{ block.super }}
+  <script src="{% static 'js/assignments.js' %}"></script>
+{% endblock %}
