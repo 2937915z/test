@@ -24,6 +24,13 @@
 
     <hr class="my-3">
     <h2 class="h6">Add plan item</h2>
+    
+    {% if form.errors %}
+      <div class="alert alert-danger">
+        {{ form.errors }}
+       </div>
+    {% endif %}
+
     <form method="post" class="row g-2">
       {% csrf_token %}
       <div class="col-6">{{ form.plan_date }}</div>

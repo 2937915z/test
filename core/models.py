@@ -92,7 +92,7 @@ class DailyPlanItem(models.Model):
         ordering = ["is_done", "created_at"]
 
     def clean(self):
-        if self.course_id and self.course.user_id != self.user_id:
+        if self.course_id and self.user_id and self.course.user_id != self.user_id:
             raise ValidationError("PlanItem course must belong to the same user.")
 
     def __str__(self) -> str:
