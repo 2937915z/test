@@ -88,13 +88,16 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
   const endISO = new Date().toISOString();
   const durationMins = parseInt(document.getElementById('duration').value, 10) - Math.floor(remaining / 60);
 
+  const assignmentId = document.getElementById("linked-assignment")?.value || null;
+  const planItemId = document.getElementById("linked-plan")?.value || null;
+
   const payload = {
     start_time: startedAtISO || new Date().toISOString(),
     end_time: endISO,
     duration_minutes: Math.max(1, durationMins),
-    note: document.getElementById('note').value || '',
-    plan_item_id: document.getElementById('linked-plan').value || null,
-    assignment_id: null,
+    note: document.getElementById("note")?.value || "",
+    assignment_id: assignmentId,
+    plan_item_id: planItemId,
   };
 
   try {
@@ -104,6 +107,7 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
     setDurationFromSelect();
     document.getElementById('note').value = '';
     document.getElementById('linked-plan').value = '';
+    document.getElementById('linked-assignment').value = '';
   } catch (err) {
     alert(`Save failed: ${err.message}`);
   }
@@ -111,3 +115,14 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
 
 // init
 setDurationFromSelect();
+const selA = document.getElementById("linked-assignment");
+const selP = document.getElementById("linked-plan");
+
+if (selA && selP) {
+  selA.addEventListener("change", () => {
+    if (selA.value) selP.value = "";
+  });
+  selP.addEventListener("change", () => {
+    if (selP.value) selA.value = "";
+  });
+}

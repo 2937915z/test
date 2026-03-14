@@ -58,6 +58,19 @@
         <label class="form-label">Session Label / Note</label>
         <input class="form-control" id="note" maxlength="255" />
       </div>
+    
+      <div class="mt-3">
+        <label class="form-label" for="linked-assignment">Linked to Assignment (optional)</label>
+        <select class="form-select" id="linked-assignment">
+         <option value="">-- none --</option>
+         {% for a in upcoming_assignments %}
+         <option value="{{ a.id }}">{{ a.title }}</option>
+          {% empty %}
+            <!-- no assignments -->
+          {% endfor %}
+       </select>
+        <div class="form-text">If selected, the FocusSession will reference assignment_id.</div>
+      </div>
 
       <div class="mt-3">
         <label class="form-label">Linked to Plan Item (optional)</label>
